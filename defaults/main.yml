@@ -1,2 +1,4 @@
 ---
 # defaults file for ansible-role-pxeboot
+
+pxeboot_images: []
