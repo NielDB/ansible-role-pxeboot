@@ -11,7 +11,7 @@
     state: present
 
 
-- name: "Installing packages"
+- name: "Installing dhcpd"
   yum:
     name:
       - dhcp
@@ -22,29 +22,37 @@
   blockinfile:
     path: /etc/dhcp/dhcpd.conf
     block: |
-
+      # DHCP Server Configuration file.
+      
       ddns-update-style interim;
       ignore client-updates;
       authoritative;
       allow booting;
       allow bootp;
       allow unknown-clients;
-
+      
       # internal subnet for my DHCP Server
-      subnet 10.0.0.0 netmask 255.255.255.0 {
-      range 10.0.0.100 172.16.0.3900;
-      option domain-name-servers 172.16.0.39;
+      subnet 10.0.0.0 netmask 255.0.0.0 {
+      range 10.0.0.100 10.0.0.200;
+      option domain-name-servers 10.0.0.2;
       option domain-name "pxe.example.com";
-      option routers 172.16.0.39;
-      option broadcast-address 10.255.255.255;
+      option routers 10.0.0.2;
+      option broadcast-address 10.0.0.255;
       default-lease-time 600;
       max-lease-time 7200;
-
+      
       # IP of PXE Server
-      next-server 172.16.0.39;
+      next-server 10.0.0.2;
       filename "pxelinux.0";
       }
-  when: pxeboot_dhcp
+  when: pxeboot_dhcp and pxeboot_dhcp_config is undefined
+
+
+- name: Copy local dhcpd.conf file
+  copy:
+    src: "{{ pxeboot_dhcp_config }}"
+    dest: /etc/dhcp/dhcpd.conf
+  when: pxeboot_dhcp and pxeboot_dhcp_config is defined
 
 
 - name: Edit config file for tftp
@@ -115,11 +123,11 @@
     state: directory
   with_items: "{{ pxeboot_images }}"
 
-- name: Create directories for boot images
-  file:
-    path: "/var/ftp/pub/{{ item.name }}/iso"
-    state: directory
-  with_items: "{{ pxeboot_images }}"
+# - name: Create directories for boot images
+#   file:
+#     path: "/var/ftp/pub/{{ item.name }}/iso"
+#     state: directory
+#   with_items: "{{ pxeboot_images }}"
 
 
 - name: Download kernel files
@@ -168,15 +176,14 @@
 
 - name: Add local kickstart file for Images
   copy:
-    src: "{{ local_kickstartfile }}"
+    src: "{{ item.local_kickstart }}"
     dest: "/var/ftp/pub/kick-{{ item.name }}.cfg"
-    remote_src: yes
   with_items: "{{ pxeboot_images }}"
-  when: item.local_kickstartfile is defined
+  when: item.local_kickstart is defined
 
 - name: Download kickstart file for Images
   get_url:
-    url: "{{ item.kickstart_url }}"local
+    url: "{{ item.kickstart_url }}"
     dest: "/var/ftp/pub/kick-{{ item.name }}.cfg"
   with_items: "{{ pxeboot_images }}"
   when: item.kickstart_url is defined
@@ -201,7 +208,7 @@
       LABEL {{ item.0 }}
       MENU LABEL ^{{ item.0 }}) {{ item.1.name }}
       KERNEL /{{ item.1.name }}/vmlinuz
-      APPEND initrd=/{{ item.1.name }}/initrd.img inst.repo=ftp://172.16.0.39/pub/centos ks=ftp://172.16.0.39/pub/kick-centos.cfg
+      APPEND initrd=/{{ item.1.name }}/initrd.img inst.repo=ftp://{{ pxeboot_ip }}/pub/{{ item.1.name }} ks=ftp://{{ pxeboot_ip }}/pub/kick-{{ item.1.name }}.cfg
   with_indexed_items: "{{ pxeboot_images }}"
 
 
