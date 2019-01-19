@@ -3,7 +3,6 @@
 - name: "Installing packages"
   yum:
     name:
-  #  - dhcp
       - tftp
       - tftp-server
       - syslinux
@@ -11,32 +10,41 @@
       - xinetd
     state: present
 
-  # - name: Edit config file for dhcp
-  #   blockinfile:
-  # path: /etc/dhcp/dhcpd.conf
-  # block: |
 
-  #   ddns-update-style interim;
-  #   ignore client-updates;
-  #   authoritative;
-  #   allow booting;
-  #   allow bootp;
-  #   allow unknown-clients;
+- name: "Installing packages"
+  yum:
+    name:
+      - dhcp
+    state: present
+  when: pxeboot_dhcp
 
-  #   # internal subnet for my DHCP Server
-  #   subnet 10.0.0.0 netmask 255.255.255.0 {
-  #   range 10.0.0.100 172.16.0.3900;
-  #   option domain-name-servers 172.16.0.39;
-  #   option domain-name "pxe.example.com";
-  #   option routers 172.16.0.39;
-  #   option broadcast-address 10.255.255.255;
-  #   default-lease-time 600;
-  #   max-lease-time 7200;
+- name: Edit config file for dhcp
+  blockinfile:
+    path: /etc/dhcp/dhcpd.conf
+    block: |
 
-  #   # IP of PXE Server
-  #   next-server 172.16.0.39;
-  #   filename "pxelinux.0";
-  #   }
+      ddns-update-style interim;
+      ignore client-updates;
+      authoritative;
+      allow booting;
+      allow bootp;
+      allow unknown-clients;
+
+      # internal subnet for my DHCP Server
+      subnet 10.0.0.0 netmask 255.255.255.0 {
+      range 10.0.0.100 172.16.0.3900;
+      option domain-name-servers 172.16.0.39;
+      option domain-name "pxe.example.com";
+      option routers 172.16.0.39;
+      option broadcast-address 10.255.255.255;
+      default-lease-time 600;
+      max-lease-time 7200;
+
+      # IP of PXE Server
+      next-server 172.16.0.39;
+      filename "pxelinux.0";
+      }
+  when: pxeboot_dhcp
 
 
 - name: Edit config file for tftp
@@ -95,7 +103,6 @@
     state: directory
 
 
-
 - name: Create directories for boot images
   file:
     path: "/var/lib/tftpboot/{{ item.name }}"
@@ -115,39 +122,64 @@
   with_items: "{{ pxeboot_images }}"
 
 
-- name: Download kernel images
+- name: Download kernel files
   get_url:
     url: "{{ item.kernel_url }}"
     dest: "/var/lib/tftpboot/{{ item.name }}/vmlinuz"
   with_items: "{{ pxeboot_images }}"
+  when: item.kernel_url is defined
 
-- name: Download initrd images
+- name: Download initrd files
   get_url:
     url: "{{ item.initrd_url }}"
     dest: "/var/lib/tftpboot/{{ item.name }}/initrd.img"
   with_items: "{{ pxeboot_images }}"
+  when: item.initrd_url is defined
 
 - name: Download LiveOS for images
   get_url:
     url: "{{ item.liveos_url }}"
     dest: "/var/ftp/pub/{{ item.name }}/LiveOS"
   with_items: "{{ pxeboot_images }}"
+  when: item.liveos_url is defined
 
 
+- name: Copy local kernel images
+  copy:
+    src: "{{ item.local_kernel }}"
+    dest: "/var/lib/tftpboot/{{ item.name }}/vmlinuz"
+  with_items: "{{ pxeboot_images }}"
+  when: item.local_kernel is defined
 
-# - name: Add local kickstart file for Images
-#   copy:
-#     src: {{ kickstartfile_path }}
-#     dest: "/var/ftp/pub/kick-{{ item.name }}.cfg"
-#     remote_src: yes
-#   with_items: "{{ pxeboot_images }}"
+- name: Copy local initrd images
+  copy:
+    src: "{{ item.local_initrd }}"
+    dest: "/var/lib/tftpboot/{{ item.name }}/vmlinuz"
+  with_items: "{{ pxeboot_images }}"
+  when: item.local_initrd is defined
+
+- name: Copy local kernel images
+  copy:
+    src: "{{ item.local_liveos }}"
+    dest: "/var/lib/tftpboot/{{ item.name }}/vmlinuz"
+  with_items: "{{ pxeboot_images }}"
+  when: item.local_liveos is defined
+
+
+- name: Add local kickstart file for Images
+  copy:
+    src: "{{ local_kickstartfile }}"
+    dest: "/var/ftp/pub/kick-{{ item.name }}.cfg"
+    remote_src: yes
+  with_items: "{{ pxeboot_images }}"
+  when: item.local_kickstartfile is defined
 
 - name: Download kickstart file for Images
   get_url:
-    url: "{{ item.kickstart_url }}"
+    url: "{{ item.kickstart_url }}"local
     dest: "/var/ftp/pub/kick-{{ item.name }}.cfg"
   with_items: "{{ pxeboot_images }}"
-
+  when: item.kickstart_url is defined
 
 
 - name: Create PXEBoot menu file
@@ -158,7 +190,6 @@
       prompt 0
 
       MENU TITLE PXE Menu
-
 
 - name: Append images to PXEBoot menu
   blockinfile: 
@@ -180,11 +211,12 @@
     state: started
     enabled: yes
 
-# - name: Start & enable service dhcpd
-#   service:
-# name: dhcpd
-# state: started
-# enabled: yes
+- name: Start & enable service dhcpd
+  service:
+    name: dhcpd
+    state: started
+    enabled: yes
+  when: pxeboot_dhcp
 
 - name: Start & enable service vsftpd
   service:

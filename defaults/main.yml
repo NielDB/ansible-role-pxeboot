@@ -1,2 +1,5 @@
 ---
 # defaults file for ansible-role-pxeboot
+
+pxeboot_images: []
+pxeboot_dhcp: false
