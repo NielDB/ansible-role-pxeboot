@@ -122,13 +122,7 @@
     path: "/var/ftp/pub/{{ item.name }}/LiveOS"
     state: directory
   with_items: "{{ pxeboot_images }}"
-
-# - name: Create directories for boot images
-#   file:
-#     path: "/var/ftp/pub/{{ item.name }}/iso"
-#     state: directory
-#   with_items: "{{ pxeboot_images }}"
-
+  
 
 - name: Download kernel files
   get_url:
@@ -147,7 +141,7 @@
 - name: Download LiveOS for images
   get_url:
     url: "{{ item.liveos_url }}"
-    dest: "/var/ftp/pub/{{ item.name }}/LiveOS"
+    dest: "/var/ftp/pub/{{ item.name }}/LiveOS/squashfs.img"
   with_items: "{{ pxeboot_images }}"
   when: item.liveos_url is defined
 
